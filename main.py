@@ -4,52 +4,51 @@ from aiogram import Bot, Dispatcher, executor, types
 from openai import OpenAI
 from dotenv import load_dotenv
 
-# .env faylini yuklab olish
+# .env faylini yuklaymiz
 load_dotenv()
 
-# Muhit o'zgaruvchilarini olish
+# Muhit o'zgaruvchilarini olamiz
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not TELEGRAM_TOKEN or not OPENAI_API_KEY:
     raise RuntimeError("TELEGRAM_TOKEN va OPENAI_API_KEY muhit o'zgaruvchilari aniqlanmadi!")
 
-# Telegram va OpenAI mijozlari
+# Telegram va OpenAI mijozlarini sozlaymiz
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher(bot)
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Log sozlamalari
+# Logging yoqamiz
 logging.basicConfig(level=logging.INFO)
 
 
-# GPT'dan javob olish funksiyasi
-async def get_gpt_answer(message: str) -> str:
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",  # kerak bo'lsa gpt-4 yoki gpt-3.5 ham ishlatish mumkin
-        messages=[{"role": "user", "content": message}]
-    )
-    return response.choices[0].message.content
-
-
-# Start komandasi
+# /start komandasi
 @dp.message_handler(commands=["start"])
 async def start_handler(message: types.Message):
-    await message.answer("👋 Salom! Men Anilordtv va Anifinx kanal uchun yaratilgan bot man.")
+    await message.answer("Salom! Men ChatGPT bilan ishlaydigan botman 🤖\nSavolingizni yozing.")
 
 
-# Asosiy xabarlarni qayta ishlash
+# Barcha matnlarni OpenAI ga yuboramiz
 @dp.message_handler()
 async def chat_handler(message: types.Message):
     try:
-        user_text = message.text
-        gpt_response = await get_gpt_answer(user_text)
-        await message.answer(gpt_response)
+        # OpenAI API orqali javob olish
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",  # Tez va arzon model
+            messages=[
+                {"role": "system", "content": "Siz foydalanuvchiga yordam beradigan yordamchisiz."},
+                {"role": "user", "content": message.text},
+            ],
+        )
+
+        reply_text = completion.choices[0].message.content
+        await message.answer(reply_text)
+
     except Exception as e:
-        logging.error(f"Xatolik yuz berdi: {e}")
-        await message.answer("❌ Xatolik yuz berdi. Keyinroq urinib ko'ring.")
+        logging.error(f"Xatolik: {e}")
+        await message.answer("Kechirasiz, serverda xatolik yuz berdi ❌")
 
 
 if __name__ == "__main__":
-    logging.info("🤖 Bot ishga tushdi...")
     executor.start_polling(dp, skip_updates=True)
