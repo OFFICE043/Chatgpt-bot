@@ -35,7 +35,7 @@ async def chat_handler(message: types.Message):
     try:
         # OpenAI API orqali javob olish
         completion = client.chat.completions.create(
-            model="gpt-4o-mini",  # Tez va arzon model
+            model="gpt-5",  # Tez va arzon model
             messages=[
                 {"role": "system", "content": "Siz foydalanuvchiga yordam beradigan yordamchisiz."},
                 {"role": "user", "content": message.text},
