@@ -1,93 +1,55 @@
-# main.py
-# Bot uchun asosiy fayl
-
 import os
-import asyncio
+import logging
+from aiogram import Bot, Dispatcher, executor, types
+from openai import OpenAI
 from dotenv import load_dotenv
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
-import openai
 
-# Muhim: Foydalanuvchi interfeysidagi barcha matnlar O'ZBEK (latın) tilida yozilgan
-
+# .env faylini yuklab olish
 load_dotenv()
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-ADMIN_IDS = os.getenv('ADMIN_IDS', '')
+
+# Muhit o'zgaruvchilarini olish
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not TELEGRAM_TOKEN or not OPENAI_API_KEY:
-    raise RuntimeError("TELEGRAM_TOKEN va OPENAI_API_KEY muhit o'zgaruvchilari aniqlanmadi. .env faylini tekshiring.")
+    raise RuntimeError("TELEGRAM_TOKEN va OPENAI_API_KEY muhit o'zgaruvchilari aniqlanmadi!")
 
-openai.api_key = OPENAI_API_KEY
-
+# Telegram va OpenAI mijozlari
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher(bot)
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-# rules.txt faylidan qoidalarni yuklaymiz
-with open('rules.txt', 'r', encoding='utf-8') as f:
-    BOT_QOIDALARI = f.read().strip()
+# Log sozlamalari
+logging.basicConfig(level=logging.INFO)
 
-# Boshlang'ich xabar
-START_XABAR = (
-    "Assalomu alaykum! Men ChatGPT asosidagi yordamchim.\n"
-    "Savolingizni yozing — men O'zbek (lotin) tilida javob beraman.\n\n"
-    "Agar kod kerak bo'lsa, aniq til va tafsilotlarni ayting.\n"
-)
 
-@dp.message_handler(commands=['start'])
-async def boshla(message: types.Message):
-    await message.reply(START_XABAR)
-
-@dp.message_handler(commands=['help'])
-async def yordam(message: types.Message):
-    yordam_matn = (
-        "Qo'llanma:\n"
-        "/start - botni ishga tushirish\n"
-        "/help - yordam\n"
-        "Faqat oddiy savollar va kod so'rovlarini qabul qilaman.\n"
+# GPT'dan javob olish funksiyasi
+async def get_gpt_answer(message: str) -> str:
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",  # kerak bo'lsa gpt-4 yoki gpt-3.5 ham ishlatish mumkin
+        messages=[{"role": "user", "content": message}]
     )
-    await message.reply(yordam_matn)
+    return response.choices[0].message.content
 
-async def chatgpt_sozla(savol: str) -> str:
-    """Savol va qoidalarni OpenAI ChatCompletion-ga yuboradi va javobni qaytaradi"""
-    prompt = f"{BOT_QOIDALARI}\n\nFoydalanuvchi savoli:\n{savol}"
 
-    # openai.ChatCompletion sync funksiyasini bloklamaslik uchun asyncio.to_thread ishlatamiz
-    def _call_openai():
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",  # agar sizda mavjud bo'lmasa modelni 'gpt-3.5-turbo' ga almashtiring
-            messages=[
-                {"role": "system", "content": BOT_QOIDALARI},
-                {"role": "user", "content": savol}
-            ],
-            max_tokens=1200,
-            temperature=0.2,
-        )
-        return response
+# Start komandasi
+@dp.message_handler(commands=["start"])
+async def start_handler(message: types.Message):
+    await message.answer("👋 Salom! Men Anilordtv va Anifinx kanal uchun yaratilgan bot man.")
 
-    try:
-        resp = await asyncio.to_thread(_call_openai)
-        text = resp['choices'][0]['message']['content'].strip()
-        return text
-    except Exception as e:
-        return f"Xatolik yuz berdi: {str(e)}"
 
+# Asosiy xabarlarni qayta ishlash
 @dp.message_handler()
-async def umumiy(message: types.Message):
-    # Qisqa typing holatini ko'rsatish
-    await bot.send_chat_action(message.chat.id, action=types.ChatActions.TYPING)
+async def chat_handler(message: types.Message):
+    try:
+        user_text = message.text
+        gpt_response = await get_gpt_answer(user_text)
+        await message.answer(gpt_response)
+    except Exception as e:
+        logging.error(f"Xatolik yuz berdi: {e}")
+        await message.answer("❌ Xatolik yuz berdi. Keyinroq urinib ko'ring.")
 
-    foydalanuvchi_text = message.text
-    javob = await chatgpt_sozla(foydalanuvchi_text)
 
-    # Agar javob juda uzun bo'lsa bo'lib yuborish mumkin
-    if len(javob) > 4000:
-        # uzun javobni bo'lib yuborish
-        for i in range(0, len(javob), 4000):
-            await message.reply(javob[i:i+4000])
-    else:
-        await message.reply(javob)
-
-if __name__ == '__main__':
-    print("Bot ishga tushmoqda...")
+if __name__ == "__main__":
+    logging.info("🤖 Bot ishga tushdi...")
     executor.start_polling(dp, skip_updates=True)
